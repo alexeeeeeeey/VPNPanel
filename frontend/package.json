@@ -1,0 +1,25 @@
+{
+  "name": "vpn-panel-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "^6",
+    "codemirror": "^6",
+    "lucide-vue-next": "^0.577",
+    "uplot": "^1.6.32",
+    "vue": "^3",
+    "vue-router": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@vitejs/plugin-vue": "^6",
+    "tailwindcss": "^4",
+    "typescript": "^5.9",
+    "vite": "^7",
+    "vue-tsc": "^3"
+  }
+}
