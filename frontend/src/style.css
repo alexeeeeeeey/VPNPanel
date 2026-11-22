@@ -464,6 +464,7 @@ button:disabled { opacity: .45; }
 .variable-row-header .icon-button { width: 26px; height: 26px; padding: 5px; border: 0; }
 .variable-value { display: grid; grid-template-columns: minmax(0, 1fr); }
 .config-settings .variable-value input, .config-settings .variable-value select { min-width: 0; margin: 0; height: 36px; padding: 6px 8px; font-size: 12px; background: color-mix(in srgb, var(--surface), var(--accent) 7%); border-color: color-mix(in srgb, var(--edge), var(--accent) 12%); color: inherit; }
+.config-settings .variable-value textarea { min-width: 0; width: 100%; min-height: 36px; margin: 0; padding: 6px 8px; resize: vertical; font: 12px/1.5 ui-monospace, monospace; background: color-mix(in srgb, var(--surface), var(--accent) 7%); border-color: color-mix(in srgb, var(--edge), var(--accent) 12%); color: inherit; }
 .variable-add { display: flex; gap: 6px; align-items: center; }
 .config-settings .variable-add input { min-width: 0; margin: 0; height: 36px; background: color-mix(in srgb, var(--surface), var(--accent) 7%); }
 .config-settings input::placeholder { color: var(--muted); opacity: .8; }

@@ -36,25 +36,14 @@ func mountTemplates(r chi.Router, s *store.Store) {
 			httpx.Fail(w, 400, "Укажите имя и тип шаблона")
 			return
 		}
-		requirements, err := config.Requirements(t.Body)
-		if err != nil {
-			httpx.Fail(w, 400, err.Error())
-			return
-		}
-		// Validate markers even when there are no real users yet.
-		dummy := config.User{UUID: "validation", LimitedUUID: "validation-limited", Enabled: true}
-		variables := map[string]any{}
-		for _, name := range requirements {
-			variables[name] = "null"
-		}
-		if _, err := config.RenderWithVariables(t.Body, t.Kind, nil, &dummy, variables); err != nil {
+		if err := config.ValidateTemplate(t.Body, t.Kind); err != nil {
 			httpx.Fail(w, 400, err.Error())
 			return
 		}
 		if t.ID == "" {
 			t.ID = store.UUID()
 		}
-		_, err = s.DB.ExecContext(r.Context(), `INSERT INTO templates(id,name,kind,body) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,body=excluded.body`, t.ID, t.Name, t.Kind, t.Body)
+		_, err := s.DB.ExecContext(r.Context(), `INSERT INTO templates(id,name,kind,body) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,body=excluded.body`, t.ID, t.Name, t.Kind, t.Body)
 		if err != nil {
 			httpx.Fail(w, 500, "Не удалось сохранить шаблон")
 			return

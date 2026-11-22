@@ -19,13 +19,15 @@ func TestNodeProxyRoutesOnlyPanelOperations(t *testing.T) {
 		w.Header().Set("X-Test-Route", r.Method+" "+r.URL.Path)
 	}))
 	t.Cleanup(remote.Close)
-	t.Setenv("VPNPANEL_NODES", `{"test":"`+remote.URL+`"}`)
 	router := chi.NewRouter()
 	s, err := store.Open(filepath.Join(t.TempDir(), "nodes.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.DB.Close() })
+	if _, err := s.DB.Exec("INSERT INTO panel_nodes(id,name,url,api_key) VALUES(?,?,?,?)", "test", "Test node", remote.URL, ""); err != nil {
+		t.Fatal(err)
+	}
 	router.Route("/api", func(r chi.Router) { mountNodes(r, s.DB) })
 	for _, check := range []struct {
 		method, endpoint, remoteRoute string

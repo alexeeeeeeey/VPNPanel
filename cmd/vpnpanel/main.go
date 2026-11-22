@@ -33,10 +33,10 @@ import (
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	listen := flag.String("listen", "127.0.0.1:9080", "HTTP listen address (loopback only in this development version)")
+	listen := flag.String("listen", "127.0.0.1:8090", "HTTP listen address (loopback only in this development version)")
 	dbPath := flag.String("db", "data/panel.db", "SQLite database")
 	web := flag.String("web", "", "external frontend directory (default: embedded frontend)")
-	base := flag.String("base-path", os.Getenv("VPNPANEL_BASE_PATH"), "panel URL prefix")
+	base := flag.String("base-path", "", "panel URL prefix")
 	export := flag.String("connection-url", "", "print a connection code for this URL and exit")
 	nodeName := flag.String("node-name", "", "node name for the connection code")
 	xrayBinary := flag.String("xray", "", "path to Xray executable for automatic configuration deployment")

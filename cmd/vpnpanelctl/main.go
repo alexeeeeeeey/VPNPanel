@@ -12,7 +12,7 @@ import (
 
 func main() {
 	host := flag.String("host", "", "host alias from OpenSSH config")
-	port := flag.Int("port", 9080, "loopback API port on the server")
+	port := flag.Int("port", 8090, "loopback API port on the server")
 	prefix := flag.String("base-path", "", "panel URL prefix")
 	authFile := flag.String("auth-file", "/etc/vpnpanel/cli.headers", "node-local headers file read by curl on the SSH server")
 	showVersion := flag.Bool("version", false, "print version and exit")

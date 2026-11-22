@@ -5,5 +5,5 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: './',
   plugins: [vue(), tailwindcss()],
-  server: { proxy: { '/api': 'http://127.0.0.1:9080' } },
+  server: { proxy: { '/api': 'http://127.0.0.1:8090' } },
 })

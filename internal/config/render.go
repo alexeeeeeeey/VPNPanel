@@ -12,6 +12,7 @@ import (
 )
 
 var customMarker = regexp.MustCompile(`^\$[A-Z][A-Z0-9_]{0,63}$`)
+var jsonString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 var textMarker = regexp.MustCompile(`\$[A-Z][A-Z0-9_]*`)
 
 func SystemVariable(name string) bool {
@@ -21,10 +22,13 @@ func SystemVariable(name string) bool {
 	}
 	return false
 }
+
+// Requirements scans markers without parsing a template that may contain raw JSON fragments.
 func Requirements(raw string) ([]string, error) {
-	root, err := Decode(maskTextMarkers(raw))
-	if err != nil {
-		return nil, err
+	if !textMarker.MatchString(raw) {
+		if _, err := Decode(raw); err != nil {
+			return nil, err
+		}
 	}
 	found := map[string]bool{}
 	for _, token := range textMarker.FindAllString(raw, -1) {
@@ -35,36 +39,12 @@ func Requirements(raw string) ([]string, error) {
 			found[token[1:]] = true
 		}
 	}
-	var visit func(any) error
-	visit = func(value any) error {
-		switch v := value.(type) {
-		case string:
-			if strings.HasPrefix(v, "&") && customMarker.MatchString("$"+v[1:]) && !SystemVariable(v[1:]) {
-				found[v[1:]] = true
-			}
-			if customMarker.MatchString(v) && !SystemVariable(v[1:]) {
-				found[v[1:]] = true
-			}
-		case []any:
-			for _, item := range v {
-				if err := visit(item); err != nil {
-					return err
-				}
-			}
-		case map[string]any:
-			for key, item := range v {
-				if strings.HasPrefix(key, "$") || strings.HasPrefix(key, "&") {
-					return fmt.Errorf("метки в ключах JSON не поддерживаются")
-				}
-				if err := visit(item); err != nil {
-					return err
-				}
-			}
+	for _, literal := range jsonString.FindAllString(raw, -1) {
+		var value string
+		if json.Unmarshal([]byte(literal), &value) == nil && strings.HasPrefix(value, "&") &&
+			customMarker.MatchString("$"+value[1:]) && !SystemVariable(value[1:]) {
+			found[value[1:]] = true
 		}
-		return nil
-	}
-	if err := visit(root); err != nil {
-		return nil, err
 	}
 	result := []string{}
 	for name := range found {
@@ -72,6 +52,27 @@ func Requirements(raw string) ([]string, error) {
 	}
 	sort.Strings(result)
 	return result, nil
+}
+
+// ValidateTemplate defers JSON validation until all textual variables are substituted.
+func ValidateTemplate(raw, kind string) error {
+	if kind != "client" && kind != "server" {
+		return fmt.Errorf("неизвестный тип шаблона")
+	}
+	requirements, err := Requirements(raw)
+	if err != nil {
+		return err
+	}
+	if textMarker.MatchString(raw) {
+		return nil
+	}
+	dummy := User{UUID: "validation", LimitedUUID: "validation-limited", Enabled: true}
+	values := map[string]any{}
+	for _, name := range requirements {
+		values[name] = "validation"
+	}
+	_, err = RenderWithVariables(raw, kind, nil, &dummy, values)
+	return err
 }
 func Missing(raw string, values map[string]any) ([]string, error) {
 	names, err := Requirements(raw)
@@ -112,21 +113,66 @@ func (u User) Active(now time.Time) bool {
 	return u.Enabled && (u.ExpiresAt == 0 || now.Unix() < u.ExpiresAt)
 }
 
-// Decode preserves numbers and rejects trailing data and non-object configurations.
+// Decode preserves numbers and rejects duplicate fields, trailing data and non-object configurations.
 func Decode(raw string) (map[string]any, error) {
 	d := json.NewDecoder(strings.NewReader(raw))
 	d.UseNumber()
-	var value map[string]any
-	if err := d.Decode(&value); err != nil {
+	decoded, err := decodeValue(d)
+	if err != nil {
 		return nil, fmt.Errorf("JSON: %w", err)
 	}
-	if value == nil {
+	value, ok := decoded.(map[string]any)
+	if !ok {
 		return nil, fmt.Errorf("корень конфига должен быть объектом")
 	}
 	if err := d.Decode(new(any)); err != io.EOF {
 		return nil, fmt.Errorf("лишние данные после JSON")
 	}
 	return value, nil
+}
+
+func decodeValue(d *json.Decoder) (any, error) {
+	token, err := d.Token()
+	if err != nil {
+		return nil, err
+	}
+	switch token {
+	case json.Delim('{'):
+		value := map[string]any{}
+		for d.More() {
+			keyToken, err := d.Token()
+			if err != nil {
+				return nil, err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return nil, fmt.Errorf("ожидается ключ объекта")
+			}
+			if _, exists := value[key]; exists {
+				return nil, fmt.Errorf("повторяющийся ключ %q: поля объектов автоматически не объединяются", key)
+			}
+			item, err := decodeValue(d)
+			if err != nil {
+				return nil, err
+			}
+			value[key] = item
+		}
+		_, err := d.Token()
+		return value, err
+	case json.Delim('['):
+		value := []any{}
+		for d.More() {
+			item, err := decodeValue(d)
+			if err != nil {
+				return nil, err
+			}
+			value = append(value, item)
+		}
+		_, err := d.Token()
+		return value, err
+	default:
+		return token, nil
+	}
 }
 
 func Render(raw, kind string, users []User, selected *User) ([]byte, error) {
@@ -200,37 +246,6 @@ func RenderWithVariables(raw, kind string, users []User, selected *User, custom 
 	e.SetIndent("", "  ")
 	err = e.Encode(value)
 	return out.Bytes(), err
-}
-
-// Validate the template's JSON structure without requiring variable values yet.
-func maskTextMarkers(raw string) string {
-	var out strings.Builder
-	cursor := 0
-	quoted, escaped := false, false
-	for _, span := range textMarker.FindAllStringIndex(raw, -1) {
-		for _, char := range raw[cursor:span[0]] {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if char == '\\' && quoted {
-				escaped = true
-				continue
-			}
-			if char == '"' {
-				quoted = !quoted
-			}
-		}
-		out.WriteString(raw[cursor:span[0]])
-		if quoted {
-			out.WriteString("validation")
-		} else {
-			out.WriteString("null")
-		}
-		cursor = span[1]
-	}
-	out.WriteString(raw[cursor:])
-	return out.String()
 }
 
 func replace(value any, vars map[string]any) (any, error) {

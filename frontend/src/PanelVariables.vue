@@ -85,7 +85,7 @@ onMounted(load)
           <button v-if="!required.includes(row.name)" type="button" class="icon-button" :disabled="busy" :aria-label="'Удалить ' + row.name" @click="rows = rows.filter(item => item.name !== row.name)"><Trash2 :size="14" /></button>
         </div>
         <div class="variable-value">
-          <input :id="'variable-' + row.name" :value="row.value" :disabled="busy" placeholder="Не задано" @input="edit(row, ($event.target as HTMLInputElement).value)">
+          <textarea :id="'variable-' + row.name" :value="row.value" :disabled="busy" :rows="Math.min(12, row.value.split('\n').length)" spellcheck="false" placeholder="Не задано" @input="edit(row, ($event.target as HTMLTextAreaElement).value)"></textarea>
         </div>
       </div>
       <div class="variable-add">

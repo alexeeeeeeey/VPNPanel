@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -24,26 +23,8 @@ import (
 )
 
 func mountNodes(r chi.Router, db *sql.DB) {
-	legacy := map[string]cluster.Peer{}
-	var addresses map[string]string
-	var inventoryError string
-	raw := os.Getenv("VPNPANEL_NODES")
-	if raw != "" && json.Unmarshal([]byte(raw), &addresses) != nil {
-		inventoryError = "Неверный формат VPNPANEL_NODES"
-	}
-	for id, address := range addresses {
-		p := cluster.Peer{ID: id, Name: id, URL: address}
-		if _, err := p.Validate(); err == nil {
-			legacy[id] = p
-		} else {
-			inventoryError = "Недопустимый адрес в VPNPANEL_NODES"
-		}
-	}
 	r.Get("/nodes", func(w http.ResponseWriter, req *http.Request) {
 		all := map[string]cluster.Peer{}
-		for id, p := range legacy {
-			all[id] = p
-		}
 		rows, err := db.QueryContext(req.Context(), "SELECT id,name,url FROM panel_nodes")
 		if err != nil {
 			httpx.Fail(w, 500, "Не удалось загрузить серверы")
@@ -74,10 +55,9 @@ func mountNodes(r chi.Router, db *sql.DB) {
 		slices.Sort(nodes[1:])
 		items := make([]map[string]any, 0, len(all))
 		for _, id := range nodes[1:] {
-			_, inherited := legacy[id]
-			items = append(items, map[string]any{"id": id, "name": all[id].Name, "url": all[id].URL, "managed": !inherited})
+			items = append(items, map[string]any{"id": id, "name": all[id].Name, "url": all[id].URL, "managed": true})
 		}
-		httpx.Write(w, 200, map[string]any{"nodes": nodes, "items": items, "self": self, "error": inventoryError})
+		httpx.Write(w, 200, map[string]any{"nodes": nodes, "items": items, "self": self, "error": ""})
 	})
 	save := func(w http.ResponseWriter, req *http.Request) {
 		var input struct {
@@ -152,10 +132,6 @@ func mountNodes(r chi.Router, db *sql.DB) {
 		p.Name = strings.TrimSpace(p.Name)
 		if p.Name == "" || len(p.Name) > 120 {
 			httpx.Fail(w, 400, "Укажите имя длиной от 1 до 120 байт")
-			return
-		}
-		if _, ok := legacy[p.ID]; ok {
-			httpx.Fail(w, 409, "Имя занято сервером из окружения")
 			return
 		}
 		target, err := p.Validate()
@@ -271,17 +247,15 @@ ON CONFLICT(kind,owner,record_key) DO UPDATE SET version=excluded.version,origin
 			http.NotFound(w, req)
 			return
 		}
-		p, found := legacy[id]
-		if !found {
-			err := db.QueryRowContext(req.Context(), "SELECT id,url,api_key FROM panel_nodes WHERE id=?", id).Scan(&p.ID, &p.URL, &p.Key)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					http.NotFound(w, req)
-				} else {
-					httpx.Fail(w, 500, "Не удалось прочитать сервер")
-				}
-				return
+		var p cluster.Peer
+		err := db.QueryRowContext(req.Context(), "SELECT id,url,api_key FROM panel_nodes WHERE id=?", id).Scan(&p.ID, &p.URL, &p.Key)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, req)
+			} else {
+				httpx.Fail(w, 500, "Не удалось прочитать сервер")
 			}
+			return
 		}
 		u, err := p.Validate()
 		if err != nil {

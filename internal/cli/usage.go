@@ -2,7 +2,7 @@ package cli
 
 import "regexp"
 
-const Usage = `Usage: vpnpanelctl -host SSH_ALIAS [-port 9080] [-base-path /panel] [-auth-file /etc/vpnpanel/cli.headers] COMMAND
+const Usage = `Usage: vpnpanelctl -host SSH_ALIAS [-port 8090] [-base-path /panel] [-auth-file /etc/vpnpanel/cli.headers] COMMAND
 
   state
   user-add NAME
